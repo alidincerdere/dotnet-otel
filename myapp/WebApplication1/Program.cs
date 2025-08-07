@@ -3,6 +3,8 @@ using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Metrics;
+using System.Diagnostics.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+
 
 // Configure OpenTelemetry logging
 
@@ -30,6 +34,18 @@ builder.Logging.AddOpenTelemetry(options =>
     });
 });
 
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MyDotNetApp"))
+            .AddAspNetCoreInstrumentation() // auto track HTTP request counts/durations
+            .AddMeter("WeatherForecast.Meter") // your custom meter
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri("http://localhost:4317"); // GRPC endpoint of your otel collector
+            });
+    });
 
 var app = builder.Build();
 
@@ -47,8 +63,13 @@ var summaries = new[]
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
 
+// --- CUSTOM METRIC ---
+var meter = new Meter("WeatherForecast.Meter");
+var counter = meter.CreateCounter<long>("weatherforecast_hits");
+
 app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 {
+    counter.Add(1); // increment hit counter
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
         (
@@ -58,6 +79,7 @@ app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
         ))
         .ToArray();
     logger.LogInformation("This is a log message from OpenTelemetry logger.");
+    
     return forecast;
 })
 .WithName("GetWeatherForecast")
