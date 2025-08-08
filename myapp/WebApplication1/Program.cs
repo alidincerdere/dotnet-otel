@@ -5,6 +5,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
 using System.Diagnostics.Metrics;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,17 @@ builder.Logging.AddOpenTelemetry(options =>
 });
 
 builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MyDotNetApp"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri("http://localhost:4317"); // gRPC OTLP exporter
+            });
+    })
     .WithMetrics(metrics =>
     {
         metrics
@@ -83,6 +95,7 @@ app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
     return forecast;
 })
 .WithName("GetWeatherForecast")
+
 .WithOpenApi();
 
 app.Run();
